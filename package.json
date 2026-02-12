@@ -1,0 +1,19 @@
+{
+  "name": "dkim-lab",
+  "version": "1.0.0",
+  "description": "DKIM Replay Attack Lab",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "itty-router": "^4.0.23",
+    "mailauth": "^5.0.2"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

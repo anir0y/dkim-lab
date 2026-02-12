@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DKIM Replay Attack Lab</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        body {
+            background-color: #1e1e2e;
+            color: #cdd6f4;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        .card {
+            background-color: #313244;
+            border: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            margin-bottom: 20px;
+        }
+
+        .card-header {
+            background-color: #45475a;
+            border-bottom: 1px solid #585b70;
+            font-weight: bold;
+        }
+
+        .card-header.text-center.text-white {
+            color: #ffffff !important;
+            font-weight: 900;
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.85);
+            letter-spacing: 0.02em;
+            background-color: rgba(0, 0, 0, 0.1);
+            padding: 12px 16px;
+            font-size: 1.05rem;
+            opacity: 1 !important;
+        }
+
+        /* Terminal Styling */
+        .terminal-window {
+            background-color: #11111b;
+            border-radius: 6px;
+            padding: 10px;
+            font-family: 'JetBrains Mono', 'Courier New', Courier, monospace;
+            font-size: 0.82rem;
+            color: #a6e3a1;
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #585b70;
+            white-space: pre-wrap;
+        }
+
+        .highlight-sig {
+            color: #f9e2af;
+            font-weight: bold;
+            border-bottom: 1px dashed #f9e2af;
+        }
+
+        .highlight-header {
+            color: #89b4fa;
+        }
+
+        /* Animation Zone */
+        .network-path {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 40px 20px;
+            position: relative;
+            background: #181825;
+            border-radius: 8px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+
+        .node-icon {
+            font-size: 3rem;
+            color: #cba6f7;
+            z-index: 2;
+            position: relative;
+        }
+
+        .node-label {
+            display: block;
+            font-size: 0.8rem;
+            text-align: center;
+            margin-top: 5px;
+            color: #bac2de;
+        }
+
+        .packet {
+            position: absolute;
+            left: 10%;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.5rem;
+            color: #f38ba8;
+            opacity: 0;
+            z-index: 1;
+        }
+
+        @keyframes attackMove {
+            0% { left: 10%; opacity: 1; }
+            50% { left: 50%; opacity: 1; }
+            100% { left: 90%; opacity: 0; }
+        }
+
+        .animate-attack {
+            animation: attackMove 2s ease-in-out forwards;
+        }
+
+        .status-badge {
+            font-size: 1.2rem;
+            padding: 10px 20px;
+        }
+
+        /* Vulnerability Scanner Styles */
+        .vuln-card {
+            border-left: 4px solid #585b70;
+            background: #1b1b26;
+            border-radius: 6px;
+            padding: 12px 16px;
+            margin-bottom: 10px;
+            transition: border-color 0.3s, transform 0.2s;
+            color: #e6eef8;
+        }
+
+        .vuln-card strong {
+            color: #dbeafe;
+            font-weight: 700;
+            font-size: 1.05rem;
+        }
+
+        .vuln-card small,
+        .vuln-card .text-muted {
+            color: #bac2de !important;
+        }
+
+        .vuln-card .badge {
+            color: #ffffff !important;
+        }
+
+        .vuln-card:hover {
+            transform: translateX(4px);
+        }
+
+        .vuln-card.severity-high { border-left-color: #f38ba8; }
+        .vuln-card.severity-medium { border-left-color: #fab387; }
+        .vuln-card.severity-ok { border-left-color: #a6e3a1; }
+
+        .risk-gauge {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: conic-gradient(var(--gauge-color, #585b70) var(--gauge-pct, 0%), #313244 0%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .risk-gauge-inner {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            background: #1e1e2e;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        .risk-gauge-inner .score {
+            font-size: 1.8rem;
+            font-weight: 800;
+        }
+
+        .risk-gauge-inner .label {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            color: #bac2de;
+        }
+
+        .scan-spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Educational accordion */
+        .accordion-item {
+            background-color: #313244;
+            border: 1px solid #45475a;
+        }
+
+        .accordion-button {
+            background-color: #45475a;
+            color: #cdd6f4;
+            font-weight: 600;
+        }
+
+        .accordion-button:not(.collapsed) {
+            background-color: #585b70;
+            color: #cdd6f4;
+            box-shadow: none;
+        }
+
+        .accordion-button:focus {
+            box-shadow: none;
+            border-color: #585b70;
+        }
+
+        .accordion-button::after {
+            filter: invert(0.8);
+        }
+
+        .accordion-body {
+            background-color: #313244;
+            color: #cdd6f4;
+        }
+
+        .concept-card {
+            background: #181825;
+            border-radius: 8px;
+            padding: 16px;
+            height: 100%;
+        }
+
+        .concept-card h6 {
+            color: #89b4fa;
+            margin-bottom: 8px;
+        }
+
+        .concept-card p {
+            font-size: 0.9rem;
+            color: #bac2de;
+            margin-bottom: 0;
+        }
+
+        .step-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: #89b4fa;
+            color: #1e1e2e;
+            font-weight: 800;
+            font-size: 0.85rem;
+            margin-right: 8px;
+        }
+
+        .info-text {
+            font-size: 0.85rem;
+            color: #9399b2;
+            margin-bottom: 12px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container py-4">
+        <h2 class="text-center mb-1"><i class="fas fa-shield-virus"></i> DKIM Replay Attack Lab</h2>
+        <p class="text-center mb-4" style="color: #9399b2;">An interactive lab to understand email authentication, replay attacks, and defenses.</p>
+
+        <!-- Educational Intro -->
+        <div class="accordion mb-4" id="learnAccordion">
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#learnSection" aria-expanded="true" aria-controls="learnSection">
+                        <i class="fas fa-graduation-cap me-2"></i> Background: What You Need to Know
+                    </button>
+                </h2>
+                <div id="learnSection" class="accordion-collapse collapse show" data-bs-parent="#learnAccordion">
+                    <div class="accordion-body">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <div class="concept-card">
+                                    <h6><i class="fas fa-key me-1"></i> DKIM</h6>
+                                    <p>DomainKeys Identified Mail adds a cryptographic signature to outgoing emails.
+                                        The sending server signs with a <strong>private key</strong>; the receiving
+                                        server verifies using the <strong>public key</strong> published in DNS.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="concept-card">
+                                    <h6><i class="fas fa-rotate me-1"></i> Replay Attack</h6>
+                                    <p>An attacker intercepts a legitimately signed email and <strong>resends it
+                                            later</strong>. Since standard DKIM has no expiry, the signature stays
+                                        valid forever &mdash; the replayed email passes verification.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="concept-card">
+                                    <h6><i class="fas fa-clock me-1"></i> The Defense</h6>
+                                    <p>Strict timestamp expiry checks the <code>t=</code> tag in the DKIM signature.
+                                        If the signature is older than the allowed window (5s in this lab), the
+                                        server <strong>rejects it</strong>.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="concept-card">
+                                    <h6><i class="fas fa-list-ol me-1"></i> Lab Steps</h6>
+                                    <p><strong>Step 1:</strong> Generate a signed email.<br>
+                                        <strong>Step 2:</strong> Wait a few seconds (simulating interception).<br>
+                                        <strong>Step 3:</strong> Replay it and observe the result.<br>
+                                        Try both Vulnerable and Secure modes!
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 1: Configuration + Raw Email -->
+        <div class="row">
+            <div class="col-md-5">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="step-number">1</span> Configuration
+                    </div>
+                    <div class="card-body">
+                        <p class="info-text">Configure the simulation, then generate a DKIM-signed email. In a real
+                            attack, this email would be intercepted in transit.</p>
+                        <form id="configForm">
+                            <div class="mb-3">
+                                <label class="form-label">Target Domain</label>
+                                <input type="text" class="form-control bg-dark text-light border-secondary"
+                                    id="targetDomain" value="example.com">
+                                <small class="text-muted">Used for simulation. Also used for real DNS checks
+                                    below.</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Defense Strategy</label>
+                                <select class="form-select bg-dark text-light border-secondary" id="defenseMode">
+                                    <option value="false">Vulnerable (Standard DKIM &mdash; no expiry)</option>
+                                    <option value="true">Secure (Strict 5s Expiry)</option>
+                                </select>
+                            </div>
+
+                            <button type="button" class="btn btn-primary w-100" onclick="generateEmail()">
+                                <i class="fas fa-file-signature"></i> Intercept &amp; Sign Email
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="col-md-7">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between">
+                        <span><i class="fas fa-terminal"></i> Intercepted Email (Raw Source)</span>
+                        <span class="badge bg-warning text-dark" id="timerBadge" style="display:none">
+                            Signature expires in: <span id="timeLeft">0</span>s
+                        </span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="rawEmailDisplay" class="terminal-window">Awaiting interception...
+Click "Intercept &amp; Sign Email" to generate a DKIM-signed message.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Attack Simulation -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header text-center bg-danger text-white">
+                        <span class="step-number" style="background:#fff;color:#dc3545;">2</span>
+                        Attack Simulation Zone
+                    </div>
+                    <div class="card-body text-center">
+                        <p class="info-text" style="max-width:600px;margin:0 auto 16px;">
+                            The attacker has the signed email from Step 1. They now replay it to the victim's mail
+                            server. Will the server accept or reject it?
+                        </p>
+
+                        <button type="button" class="btn btn-danger btn-lg px-5 mb-3" onclick="replayAttack()">
+                            <i class="fas fa-paper-plane"></i> Launch Replay Attack
+                        </button>
+
+                        <div class="network-path">
+                            <div class="text-center">
+                                <div class="node-icon"><i class="fas fa-user-secret"></i></div>
+                                <span class="node-label">Attacker</span>
+                            </div>
+
+                            <div id="packet" class="packet"><i class="fas fa-envelope"></i></div>
+
+                            <div class="text-center">
+                                <div class="node-icon"><i class="fas fa-server"></i></div>
+                                <span class="node-label">Victim Mail Server</span>
+                            </div>
+                        </div>
+
+                        <div id="resultArea" style="opacity: 0; transition: opacity 0.5s;">
+                            <h4>Server Verdict:</h4>
+                            <span id="verifyStatus" class="badge bg-secondary status-badge">WAITING</span>
+                            <p class="mt-2" id="verifyDetails" style="color: #89dceb;"></p>
+
+                            <!-- Explanation shown after result -->
+                            <div id="explanationArea" class="mt-3 text-start mx-auto"
+                                style="max-width:600px; display:none;">
+                                <div class="concept-card">
+                                    <h6><i class="fas fa-lightbulb me-1"></i> What Happened?</h6>
+                                    <p id="explanationText"></p>
+                                </div>
+                            </div>
+
+                            <!-- Inbox Simulation -->
+                            <div class="row mt-3">
+                                <div class="col-md-6">
+                                    <div class="card bg-dark text-light p-2">
+                                        <div class="card-header small" style="color:#a6e3a1;">
+                                            <i class="fas fa-inbox me-1"></i> Victim's Inbox
+                                        </div>
+                                        <div id="victimInbox" class="p-3"
+                                            style="min-height:120px; background:#0f1116; border-radius:6px;">
+                                            <em class="small text-muted">No messages yet.</em>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card bg-dark text-light p-2">
+                                        <div class="card-header small" style="color:#f38ba8;">
+                                            <i class="fas fa-ban me-1"></i> Rejected / Quarantine
+                                        </div>
+                                        <div id="quarantineInbox" class="p-3"
+                                            style="min-height:120px; background:#0f1116; border-radius:6px;">
+                                            <em class="small text-muted">No messages yet.</em>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Domain Vulnerability Scanner -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header text-center text-white"
+                        style="background: linear-gradient(135deg, #45475a, #585b70);">
+                        <span class="step-number" style="background:#fab387;color:#1e1e2e;">3</span>
+                        Domain Vulnerability Scanner
+                    </div>
+                    <div class="card-body">
+                        <div class="text-center mb-3">
+                            <p class="info-text">Scan a real domain's DNS records to check its DKIM, DMARC, and SPF
+                                configuration for weaknesses.</p>
+                            <button type="button" class="btn btn-outline-warning btn-lg px-4" id="scanBtn"
+                                onclick="scanDomain()">
+                                <i class="fas fa-crosshairs"></i> Scan Domain
+                            </button>
+                        </div>
+
+                        <div id="vulnResults" style="display:none;">
+                            <div class="row">
+                                <div class="col-md-4 text-center">
+                                    <div class="risk-gauge" id="riskGauge">
+                                        <div class="risk-gauge-inner">
+                                            <span class="score" id="riskScore">&mdash;</span>
+                                            <span class="label">Risk Score</span>
+                                        </div>
+                                    </div>
+                                    <span class="badge fs-6 px-3 py-2" id="verdictBadge">&mdash;</span>
+                                    <p class="mt-2 small" id="verdictSummary" style="color: #bfcbe6;"></p>
+                                </div>
+                                <div class="col-md-8">
+                                    <h6 class="text-muted mb-2"><i class="fas fa-list-check"></i> Findings</h6>
+                                    <div id="findingsList"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Educational reference for scanner -->
+                        <div class="row mt-4 g-3" id="scannerEducation" style="display:none;">
+                            <div class="col-md-4">
+                                <div class="concept-card">
+                                    <h6><i class="fas fa-key me-1"></i> DKIM</h6>
+                                    <p>Signs emails cryptographically. Without it, any server can forge emails from
+                                        this domain with no detection.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="concept-card">
+                                    <h6><i class="fas fa-shield-halved me-1"></i> DMARC</h6>
+                                    <p>Tells receiving servers what to do when DKIM/SPF fails:
+                                        <code>none</code> = ignore, <code>quarantine</code> = spam,
+                                        <code>reject</code> = block.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="concept-card">
+                                    <h6><i class="fas fa-envelope-open-text me-1"></i> SPF</h6>
+                                    <p>Lists which mail servers are authorized to send email for the domain.
+                                        <code>-all</code> = reject unauthorized, <code>~all</code> = soft fail,
+                                        <code>+all</code> = allow everyone.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentRawEmail = "";
+        let expiryTimerId = null; // track timer to prevent leaks
+
+        async function generateEmail() {
+            const useDefense = document.getElementById('defenseMode').value === 'true';
+            const domain = document.getElementById('targetDomain').value.trim();
+
+            // Reset UI
+            document.getElementById('resultArea').style.opacity = '0';
+            document.getElementById('packet').classList.remove('animate-attack');
+            const explanationArea = document.getElementById('explanationArea');
+            if (explanationArea) explanationArea.style.display = 'none';
+
+            try {
+                const response = await fetch('/sign', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ use_defense: useDefense, domain: domain })
+                });
+
+                if (!response.ok) throw new Error(`Server error: ${response.status}`);
+                const data = await response.json();
+
+                currentRawEmail = data.raw_email;
+
+                // Syntax Highlight for Terminal
+                let displayHtml = currentRawEmail
+                    .replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                    .replace(/(DKIM-Signature:)/g, '<span class="highlight-header">$1</span>')
+                    .replace(/(b=[\w\/+=]+)/g, '<span class="highlight-sig">$1</span>');
+
+                document.getElementById('rawEmailDisplay').innerHTML = displayHtml;
+
+                // Clear any previous timer
+                if (expiryTimerId) {
+                    clearInterval(expiryTimerId);
+                    expiryTimerId = null;
+                }
+
+                // Timer Logic (defense mode only)
+                if (useDefense) {
+                    let timeLeft = 5;
+                    const badge = document.getElementById('timerBadge');
+                    const timeSpan = document.getElementById('timeLeft');
+                    badge.style.display = 'inline-block';
+                    timeSpan.innerText = timeLeft;
+
+                    expiryTimerId = setInterval(() => {
+                        timeLeft--;
+                        timeSpan.innerText = Math.max(timeLeft, 0);
+                        if (timeLeft <= 0) {
+                            clearInterval(expiryTimerId);
+                            expiryTimerId = null;
+                            badge.classList.remove('bg-warning');
+                            badge.classList.add('bg-danger');
+                            timeSpan.innerText = "EXPIRED";
+                        }
+                    }, 1000);
+                } else {
+                    document.getElementById('timerBadge').style.display = 'none';
+                    document.getElementById('timerBadge').classList.remove('bg-danger');
+                    document.getElementById('timerBadge').classList.add('bg-warning');
+                }
+            } catch (err) {
+                document.getElementById('rawEmailDisplay').innerHTML =
+                    '<span style="color:#f38ba8;">Error generating email: ' + err.message + '</span>';
+            }
+        }
+
+        async function replayAttack() {
+            if (!currentRawEmail) {
+                alert("No email intercepted yet! Click 'Intercept & Sign Email' first (Step 1).");
+                return;
+            }
+
+            // 1. Trigger Animation
+            const packet = document.getElementById('packet');
+            packet.classList.remove('animate-attack');
+            void packet.offsetWidth; // Trigger reflow
+            packet.classList.add('animate-attack');
+
+            // 2. Fetch Verification (wait for animation to sync)
+            setTimeout(async () => {
+                try {
+                    const response = await fetch('/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ raw_email: currentRawEmail })
+                    });
+
+                    if (!response.ok) throw new Error(`Server error: ${response.status}`);
+                    const data = await response.json();
+
+                    // 3. Show Results
+                    const statusBadge = document.getElementById('verifyStatus');
+                    statusBadge.innerText = data.status;
+                    statusBadge.className = `badge bg-${data.css_class} status-badge`;
+
+                    document.getElementById('verifyDetails').innerText = data.details;
+                    document.getElementById('resultArea').style.opacity = '1';
+
+                    // 4. Show educational explanation
+                    showExplanation(data);
+
+                    // 5. Simulate delivery to inboxes
+                    simulateDelivery(data, currentRawEmail);
+
+                } catch (err) {
+                    document.getElementById('verifyStatus').innerText = 'ERROR';
+                    document.getElementById('verifyStatus').className = 'badge bg-warning status-badge';
+                    document.getElementById('verifyDetails').innerText = 'Request failed: ' + err.message;
+                    document.getElementById('resultArea').style.opacity = '1';
+                }
+            }, 1500);
+        }
+
+        function showExplanation(data) {
+            const area = document.getElementById('explanationArea');
+            const text = document.getElementById('explanationText');
+
+            if (data.status === 'PASS') {
+                text.innerHTML = 'The DKIM signature was <strong>cryptographically valid</strong> and no expiry check was enforced. '
+                    + 'The replayed email was accepted as genuine. In a real attack, the victim would see this in their inbox '
+                    + 'and likely trust it &mdash; because the signature IS real. '
+                    + '<br><br><strong>Takeaway:</strong> Standard DKIM alone does not prevent replay attacks.';
+            } else if (data.status === 'BLOCKED') {
+                text.innerHTML = 'The DKIM signature was <strong>cryptographically valid</strong>, but the server enforced a '
+                    + '<strong>timestamp expiry check</strong>. The signature was too old, so the email was rejected. '
+                    + '<br><br><strong>Takeaway:</strong> Timestamp-based expiry (checking <code>t=</code> and <code>x=</code> tags) '
+                    + 'is an effective defense against replay attacks.';
+            } else if (data.status === 'FAIL') {
+                text.innerHTML = 'The DKIM signature <strong>failed cryptographic verification</strong>. '
+                    + 'This means the email was tampered with after signing, or the keys don\'t match. '
+                    + '<br><br><strong>Takeaway:</strong> DKIM correctly detects tampering &mdash; this is its primary purpose.';
+            } else {
+                text.innerHTML = 'An unexpected error occurred during verification. Check the server console for details.';
+            }
+
+            area.style.display = 'block';
+        }
+
+        async function scanDomain() {
+            const domain = document.getElementById('targetDomain').value.trim();
+            if (!domain) { alert('Enter a domain first.'); return; }
+
+            const btn = document.getElementById('scanBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="scan-spinner"></span> Scanning...';
+            document.getElementById('vulnResults').style.display = 'none';
+            document.getElementById('scannerEducation').style.display = 'none';
+
+            try {
+                const response = await fetch('/check_vulnerability', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ domain: domain })
+                });
+
+                if (!response.ok) throw new Error(`Server error: ${response.status}`);
+                const data = await response.json();
+
+                if (data.status === 'ERROR') {
+                    alert(data.details);
+                    return;
+                }
+
+                // Risk Gauge
+                const gauge = document.getElementById('riskGauge');
+                const gaugeColor = data.verdict_class === 'danger' ? '#f38ba8'
+                    : data.verdict_class === 'warning' ? '#fab387' : '#a6e3a1';
+                gauge.style.background = `conic-gradient(${gaugeColor} ${data.risk_score}%, #313244 0%)`;
+                document.getElementById('riskScore').innerText = data.risk_score;
+                document.getElementById('riskScore').style.color = gaugeColor;
+
+                // Verdict Badge
+                const badge = document.getElementById('verdictBadge');
+                badge.innerText = data.verdict;
+                badge.className = `badge bg-${data.verdict_class} fs-6 px-3 py-2`;
+                document.getElementById('verdictSummary').innerText = data.summary;
+
+                // Findings
+                const list = document.getElementById('findingsList');
+                list.innerHTML = '';
+                data.findings.forEach(f => {
+                    list.innerHTML += `
+                        <div class="vuln-card severity-${f.severity}">
+                            <div class="d-flex align-items-center mb-1">
+                                <i class="fas ${f.icon} me-2" style="color:${f.severity === 'high' ? '#f38ba8' : f.severity === 'medium' ? '#fab387' : '#a6e3a1'}"></i>
+                                <strong>${escapeHtml(f.title)}</strong>
+                                <span class="badge bg-${f.severity === 'high' ? 'danger' : f.severity === 'medium' ? 'warning' : 'success'} ms-auto">${f.severity.toUpperCase()}</span>
+                            </div>
+                            <small class="text-muted">${escapeHtml(f.detail)}</small>
+                        </div>`;
+                });
+
+                document.getElementById('vulnResults').style.display = 'block';
+                document.getElementById('scannerEducation').style.display = 'flex';
+            } catch (err) {
+                alert('Scan failed: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-crosshairs"></i> Scan Domain';
+            }
+        }
+
+        // Utility: escape HTML to prevent XSS from DNS record content
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.appendChild(document.createTextNode(str));
+            return div.innerHTML;
+        }
+
+        // Inbox Simulation helpers
+        function sanitizePreview(raw) {
+            return escapeHtml(raw).split('\n').slice(0, 6).join('<br>');
+        }
+
+        function simulateDelivery(verifyData, rawEmail) {
+            const victim = document.getElementById('victimInbox');
+            const quarantine = document.getElementById('quarantineInbox');
+
+            if (!victim || !quarantine) return;
+
+            // Clear default placeholders
+            if (victim.innerHTML.includes('No messages')) victim.innerHTML = '';
+            if (quarantine.innerHTML.includes('No messages')) quarantine.innerHTML = '';
+
+            const preview = sanitizePreview(rawEmail || '');
+            const time = new Date().toLocaleTimeString();
+
+            if (verifyData.status === 'PASS') {
+                victim.innerHTML = `<div class="mb-2">
+                    <strong style="color:#a6e3a1;">${time} &mdash; Delivered</strong>
+                    <div class="small" style="color:#bac2de;">${escapeHtml(verifyData.details)}</div>
+                    <div style="color:#dbeafe;padding:6px;margin-top:6px;border-radius:4px;font-size:0.8rem;">${preview}</div>
+                </div>` + victim.innerHTML;
+            } else if (verifyData.status === 'BLOCKED' || verifyData.status === 'FAIL') {
+                quarantine.innerHTML = `<div class="mb-2">
+                    <strong style="color:#f38ba8;">${time} &mdash; ${verifyData.status === 'BLOCKED' ? 'Blocked (Replay)' : 'Rejected (Invalid)'}</strong>
+                    <div class="small" style="color:#bac2de;">${escapeHtml(verifyData.details)}</div>
+                    <div style="color:#f6d1d9;padding:6px;margin-top:6px;border-radius:4px;font-size:0.8rem;">${preview}</div>
+                </div>` + quarantine.innerHTML;
+            } else {
+                quarantine.innerHTML = `<div class="mb-2">
+                    <strong style="color:#fab387;">${time} &mdash; Error</strong>
+                    <div class="small" style="color:#bac2de;">${escapeHtml(verifyData.details)}</div>
+                </div>` + quarantine.innerHTML;
+            }
+        }
+    </script>
+
+</body>
+
+</html>
